@@ -5265,7 +5265,7 @@ debug_lib.isvalidlevel = function(level)
 	return select(1, pcall(getfenv, level))
 end 
 
-debug_lib.getmetatable = function(table_or_userdata)
+--[[debug_lib.getmetatable = function(table_or_userdata)
 	local seen = {} -- Table to track cyclic references
 
 	-- Helper function to avoid cyclic references
@@ -5317,7 +5317,7 @@ debug_lib.getmetatable = function(table_or_userdata)
 
 	return real_metamethods
 end
-
+]]
 
 debug_lib.setmetatable = function(table_or_userdata, metatable)
 	assert(type(table_or_userdata) == "table" or type(table_or_userdata) == "userdata", "First argument must be a table or userdata")

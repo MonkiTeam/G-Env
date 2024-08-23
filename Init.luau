@@ -4699,9 +4699,6 @@ end
 -- services
 local http_service = game:GetService("HttpService")
 
--- imports
-local bridge = load_module("bridge")
-
 -- variables
 local script_env
 

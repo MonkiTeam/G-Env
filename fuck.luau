@@ -1,6 +1,9 @@
 -- services
 local run_service = game:GetService("RunService")
 
+local script_env = getrenv()
+
+
 -- imports
 local bridge = (function()
 	local bridge_parent = game:GetService("RobloxReplicatedStorage")
@@ -5263,172 +5266,58 @@ debug_lib.isvalidlevel = function(level)
 end 
 
 debug_lib.getmetatable = function(table_or_userdata)
-	local result = getmetatable(table_or_userdata)
+	local seen = {} -- Table to track cyclic references
 
-	if result == nil then -- No meta
-		return
+	-- Helper function to avoid cyclic references
+	local function safeGetMetatable(obj)
+		if seen[obj] then
+			return nil -- Avoid cyclic references
+		end
+		seen[obj] = true
+		return getmetatable(obj)
 	end
 
-	if type(result) == "table" and pcall(setmetatable, table_or_userdata, result) then -- This checks if it's real without overwriting
-		return result --* We dont cache this as it will be the same always anyways
+	local result = safeGetMetatable(table_or_userdata)
+	if not result then return end
+
+	if type(result) == "table" and pcall(setmetatable, table_or_userdata, result) then
+		return result
 	end
-	-- Metamethod bruteforcing
-	-- For Full (except __gc & __tostring) Metamethod list Refer to - https://github.com/luau-lang/luau/blob/master/VM/src/ltm.cpp#L34
-
-	-- Todo: Look into more ways of making metamethods error (like https://github.com/luau-lang/luau/blob/master/VM%2Fsrc%2Flvmutils.cpp#L174)
-
-	--TODO We can also rebuild many non-dynamic things like len or arithmetic  metamethods since we know what arguments to expect in those usually
 
 	local real_metamethods = {}
 
-	xpcall(function()
-		return table_or_userdata._
-	end, function()
-		real_metamethods.__index = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		table_or_userdata._ = table_or_userdata
-	end, function()
-		real_metamethods.__newindex = debug.info(2, "f")
-	end)
-
-	-- xpcall(function()
-	-- -- !MAKE __mode ERROR SOMEHOW..
-	-- end, function()
-	-- 	newTable.__mode = debug.info(2, "f")
-	-- end)
-
-	xpcall(function()
-		return table_or_userdata:___() -- Make sure this doesn't exist in the table_or_userdata
-	end, function()
-		real_metamethods.__namecall = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		table_or_userdata() -- ! This might not error on tables with __call defined
-	end, function()
-		real_metamethods.__call = debug.info(2, "f")
-	end)
-
-	xpcall(function() -- * LUAU
-		for _ in table_or_userdata do -- ! This will never error on tables
+	local function test_metamethod(metamethod)
+		local success, info = xpcall(function()
+			return table_or_userdata[metamethod]
+		end, function()
+			return debug.info(2, "f")
+		end)
+		if not success then
+			real_metamethods[metamethod] = info
 		end
-	end, function()
-		real_metamethods.__iter = debug.info(2, "f")
-	end)
+	end
 
-	xpcall(function()
-		return #table_or_userdata -- ! This will never error on tables, with userdata the issue is same as __concat - is it even a defined metamethod in that case?
-	end, function()
-		real_metamethods.__len = debug.info(2, "f")
-	end)
+	-- Test common metamethods
+	local metamethods = {
+		"__index", "__newindex", "__call", "__len",
+		"__eq", "__add", "__sub", "__mul", "__div",
+		"__idiv", "__mod", "__pow", "__unm", "__lt",
+		"__le", "__concat"
+	}
 
-	-- * Make sure type_check_semibypass lacks any metamethods
-	local type_check_semibypass = {} -- bypass typechecks (which will return error instead of actual metamethod)
+	for _, method in ipairs(metamethods) do
+		test_metamethod(method)
+	end
 
-	xpcall(function()
-		return table_or_userdata == type_check_semibypass -- ! This will never error (it calls __eq but we need it to error); ~= can also be used
-	end, function()
-		real_metamethods.__eq = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata + type_check_semibypass
-	end, function()
-		real_metamethods.__add = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata - type_check_semibypass
-	end, function()
-		real_metamethods.__sub = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata * type_check_semibypass
-	end, function()
-		real_metamethods.__mul = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata / type_check_semibypass
-	end, function()
-		real_metamethods.__div = debug.info(2, "f")
-	end)
-
-	xpcall(function() -- * LUAU
-		return table_or_userdata // type_check_semibypass
-	end, function()
-		real_metamethods.__idiv = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata % type_check_semibypass
-	end, function()
-		real_metamethods.__mod = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata ^ type_check_semibypass
-	end, function()
-		real_metamethods.__pow = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return -table_or_userdata
-	end, function()
-		real_metamethods.__unm = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata < type_check_semibypass
-	end, function()
-		real_metamethods.__lt = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata <= type_check_semibypass
-	end, function()
-		real_metamethods.__le = debug.info(2, "f")
-	end)
-
-	xpcall(function()
-		return table_or_userdata .. type_check_semibypass -- TODO Not sure if this would work on userdata.. (do they even have __concat defined? would it be called?)
-	end, function()
-		real_metamethods.__concat = debug.info(2, "f")
-	end)
-
-	-- xpcall(function()
-	-- -- !MAKE __type ERROR SOMEHOW..
-	-- end, function()
-	-- 	newTable.__type = debug.info(2, "f")
-	-- end)
-	-- FAKE __type INBOUND
+	-- Add type and tostring handlers
 	real_metamethods.__type = typeof(table_or_userdata)
-
-	real_metamethods.__metatable = getmetatable(game) -- "The metatable is locked"
-
-	-- xpcall(function()
-	-- -- !MAKE __tostring  ERROR SOMEHOW..
-	-- end, function()
-	-- 	newTable.__tostring = debug.info(2, "f")
-	-- end)
-
-	-- FAKE __tostring INBOUND (We wrap it because 1. No rawtostring & 2. In case Table_or_Userdata Name changes)
 	real_metamethods.__tostring = function()
 		return tostring(table_or_userdata)
 	end
 
-	-- xpcall(function()
-	-- -- !MAKE __gc ERROR SOMEHOW..
-	-- end, function()
-	-- 	newTable.__gc = debug.info(2, "f")
-	-- end)
-
-	-- table.freeze(real_metamethods) -- Not using for compatibility -- We can't check readonly state of an actual metatable sadly (or can we?)
 	return real_metamethods
 end
+
 
 debug_lib.setmetatable = function(table_or_userdata, metatable)
 	assert(type(table_or_userdata) == "table" or type(table_or_userdata) == "userdata", "First argument must be a table or userdata")
@@ -5710,8 +5599,6 @@ function closure.securecall(func, scriptOrEnv, ...): ...any
 end
 
 local cache = {}
-local script_env
-
 local CloneRefs = { Clones = setmetatable({}, { __mode = "ks" }), Originals = setmetatable({}, { __mode = "vs" }) }
 
 local function ReturnOriginal(instance)

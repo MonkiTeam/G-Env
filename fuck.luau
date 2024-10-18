@@ -5771,4 +5771,6 @@ for lib = 1, #currentLIBS do
 	end
 end
 
+print("Custom ENV are loadded.")
+
 return ENV
